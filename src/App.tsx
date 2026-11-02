@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { AlarmClock, ArrowUpRight, AudioLines, Bell, BookOpen, Check, ChevronDown, CircleHelp, Clock3, CloudMoon, Flame, Focus, Goal, Headphones, Home, Menu, MoreHorizontal, Orbit, Pause, Play, Plus, Rocket, Settings2, SkipForward, Sparkles, Star, Timer, Users, X } from 'lucide-react'
 import { copy } from './content'
 import OrbitScene from './OrbitScene'
+import { Account, ApiError, ChatMessage, Friend, api, jsonPost } from './api'
 
 type View = 'home' | 'timer' | 'stations' | 'sky' | 'profile'
 type Theme = 'night' | 'dawn' | 'aurora' | 'mars' | 'cloud'
@@ -33,6 +34,8 @@ function fmt(seconds: number) { const m = Math.floor(Math.max(0, seconds) / 60),
 
 export default function App() {
   const [view, setView] = useState<View>('home')
+  const [account, setAccount] = useState<Account | null>(null)
+  const [accountLoading, setAccountLoading] = useState(true)
   const [theme, setTheme] = useState<Theme>(() => getStored('yorunge-theme', 'night'))
   const [sessions, setSessions] = useState<Session[]>(() => getStored('yorunge-sessions', []))
   const [subject, setSubject] = useState(() => getStored('yorunge-subject', ''))
@@ -52,6 +55,7 @@ export default function App() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const ambientSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => { api<{ user: Account | null }>('auth/me').then(data => setAccount(data.user)).catch(() => setAccount(null)).finally(() => setAccountLoading(false)) }, [])
   const totalMinutes = sessions.reduce((sum, item) => sum + item.minutes, 0)
   const streakStats = useMemo(() => getStreakStats(sessions), [sessions])
   const todayMinutes = sessions.filter(x => new Date(x.startedAt).toDateString() === new Date().toDateString()).reduce((sum, x) => sum + x.minutes, 0)
@@ -172,7 +176,7 @@ export default function App() {
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><span className="brand-planet"/><i/></div><span>yörünge<span className="brand-dot">.</span></span><button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Menüyü kapat"><X size={18}/></button></div>
       <div className="nav-label">MENÜ</div><nav>{menu.map(item => <button key={item.id} className={`nav-item ${view === item.id ? 'selected' : ''}`} onClick={() => { setView(item.id); setMenuOpen(false) }}><item.icon size={18}/><span>{item.label}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="station-mini"><div className="station-orb">🪐</div><div><b>İstasyonlar</b><span>Arkadaşlarınla odaklan</span></div><button aria-label="İstasyona git" onClick={() => setView('stations')}><ArrowUpRight size={15}/></button></div><button className="user-mini" onClick={() => setView('profile')}><div className="avatar-self">🧑🏻‍🚀</div><div><b>Yerel profil</b><span>Bu cihazda saklanır</span></div><MoreHorizontal size={17}/></button></div>
+      <div className="sidebar-bottom"><div className="station-mini"><div className="station-orb">🪐</div><div><b>İstasyonlar</b><span>Arkadaşlarınla odaklan</span></div><button aria-label="İstasyona git" onClick={() => setView('stations')}><ArrowUpRight size={15}/></button></div><button className="user-mini" onClick={() => setView('profile')}><div className="avatar-self">🧑🏻‍🚀</div><div><b>{account?.name || 'Hesap'}</b><span>{account ? `@${account.handle}` : accountLoading ? 'Yükleniyor…' : 'Giriş yap veya katıl'}</span></div><MoreHorizontal size={17}/></button></div>
     </aside>
     {menuOpen && <button className="scrim" aria-label="Menüyü kapat" onClick={() => setMenuOpen(false)}/>}
     <main className="main-area">
@@ -192,13 +196,13 @@ export default function App() {
               <div className="streak-card"><div className="streak-symbol"><Flame size={20} fill="currentColor"/></div><div className="streak-text"><b>{streakStats.current ? `${streakStats.current} günlük serin` : 'Serin ilk yıldızla başlar'}</b><span>{streakStats.current ? 'Yıldızların birleşiyor ✨' : 'Bugün ilk adımını atabilirsin.'}</span></div><div className="streak-days">{weekTime.map((x, i) => <div key={i} className={x.value > 0 ? 'done' : ''}><span>{x.day[0]}</span><i>{x.value > 0 ? '✦' : ''}</i></div>)}</div><button className="streak-link" onClick={() => setView('sky')}>Serini gör <ArrowUpRight size={13}/></button></div></div>
           </section>
           <section className="lower-grid"><div className="panel weekly-panel"><div className="panel-head"><div><span className="section-kicker">KÜÇÜK ADIMLAR, BÜYÜK YÖRÜNGELER</span><h2>Bu haftaki ritmin</h2></div><button className="period-select" onClick={() => setToast('Haftalık görünüm seçili.')}>Bu hafta <ChevronDown size={14}/></button></div><div className="chart-summary"><strong>{Math.floor((weekTime.reduce((sum,x)=>sum+x.value,0))/60)} sa {weekTime.reduce((sum,x)=>sum+x.value,0)%60} dk</strong><span className="trend"><ArrowUpRight size={14}/> ✦</span><small>bu hafta</small></div><div className="chart-wrap"><WeeklyChart data={weekTime} color="#82d8c9" chartId="home"/></div><div className="chart-foot"><span><i className="legend-dot"/>Odaklanma süresi</span><button onClick={() => setView('profile')}>İstatistiklerin tamamı <ArrowUpRight size={13}/></button></div></div>
-            <div className="panel friends-panel"><div className="panel-head"><div><span className="section-kicker">BİRLİKTE ODAKLAN</span><h2>İstasyonun</h2></div><button className="text-link" onClick={() => setView('stations')}>İstasyonları aç <ArrowUpRight size={13}/></button></div><div className="friends-empty"><span>✦</span><b>Henüz bir istasyonun yok</b><small>Arkadaşlarınla aynı yörüngede çalışmak için istasyonlar sayfasına göz at.</small></div><div className="friends-footer"><span>Canlı arkadaş bağlantısı sonraki aşamada açılacak.</span><button onClick={() => setView('stations')} aria-label="İstasyona git"><ArrowUpRight size={15}/></button></div></div></section>
+            <div className="panel friends-panel"><div className="panel-head"><div><span className="section-kicker">BİRLİKTE ODAKLAN</span><h2>İstasyonun</h2></div><button className="text-link" onClick={() => setView('stations')}>İstasyonları aç <ArrowUpRight size={13}/></button></div><div className="friends-empty"><span>✦</span><b>{account?'Arkadaşlarınla yörüngeni kur':'Birlikte odaklanmaya başla'}</b><small>{account?'İstasyonlar sayfasından arkadaşlık isteği gönder, dürtme bırak ve sohbet et.':'Ücretsiz hesap oluşturduğunda arkadaşlarınla aynı yörüngede buluşabilirsin.'}</small></div><div className="friends-footer"><span>{account?'Arkadaş ve sohbet verilerin hesabına bağlı.':'Hesabınla giriş yapınca sosyal özellikler açılır.'}</span><button onClick={() => setView('stations')} aria-label="İstasyona git"><ArrowUpRight size={15}/></button></div></div></section>
           <section className="bottom-grid"><div className="panel sky-preview"><div className="panel-head"><div><span className="section-kicker">SANA AİT KÜÇÜK BİR EVREN</span><h2>Gökyüzüm</h2></div><button className="text-link" onClick={() => setView('sky')}>Gökyüzüne git <ArrowUpRight size={13}/></button></div><Sky stars={sessions.length}/><div className="sky-foot"><span>Ders renkleri seanslar kaydedilince oluşur</span><b>{sessions.length} yıldız <span>·</span> {totalMinutes} dk ışık</b></div></div><div className="mission-card"><div className="mission-top"><span className="section-kicker">BU HAFTAKİ YÖRÜNGEN</span><span className="mission-icon">🚀</span></div><h3>Küçük adımlar,<br/><em>büyük keşifler</em></h3><div className="mission-progress"><div><span style={{width: Math.min(100,weekTime.reduce((sum,x)=>sum+x.value,0)/1200*100) + '%'}}/></div><b>{Math.floor(weekTime.reduce((sum,x)=>sum+x.value,0)/60)} <small>/ 20 saat</small></b></div><p>Bu hafta odaklandığın her dakika kendi yörüngeni aydınlatır.</p><div className="mission-avatars"><small>Kişisel çalışma rotan</small></div></div></section>
         </>}
         {view === 'timer' && <TimerPage active={active} secondsLeft={secondsLeft} mode={mode} setMode={setMode} timerMode={timerMode} setTimerMode={setTimerMode} subject={subject} setSubject={setSubject} topic={topic} setTopic={setTopic} motivation={copy.motivations[motivationIndex]} startSession={startSession} startStopwatch={startStopwatch} togglePause={togglePause} pauseSession={pauseSession} resetTimer={resetTimer} skipTimer={skipTimer} settings={() => setShowSettings(true)}/>}
-        {view === 'stations' && <Stations onToast={setToast}/>}
+        {view === 'stations' && <Stations account={account} onToast={setToast}/>}
         {view === 'sky' && <SkyPage sessions={sessions} totalMinutes={totalMinutes} currentStreak={streakStats.current}/>}
-        {view === 'profile' && <Profile sessions={sessions} totalMinutes={totalMinutes} todayMinutes={todayMinutes} currentStreak={streakStats.current} longestStreak={streakStats.longest} weekly={weekTime} onToast={setToast} onSettings={()=>setShowSettings(true)}/>}
+        {view === 'profile' && <Profile account={account} setAccount={setAccount} sessions={sessions} totalMinutes={totalMinutes} todayMinutes={todayMinutes} currentStreak={streakStats.current} longestStreak={streakStats.longest} weekly={weekTime} onToast={setToast} onSettings={()=>setShowSettings(true)}/>}
         <footer className="app-footer"><span>© 2026 Yörünge <i>✦</i> Arkadaşlar için yapıldı</span><span><button onClick={() => setToast('Yörünge verilerini bu cihazda saklar. Çevrimiçi eşitleme bu sürümde kapalıdır.')}>Gizlilik</button><button onClick={() => setShowSettings(true)}>Ayarlar</button><button onClick={() => setToast('İletişim kanalı sonraki geliştirme aşamasında eklenecek.')}>İletişim</button></span></footer>
       </div>
     </main>
@@ -206,7 +210,7 @@ export default function App() {
     {showReflection && <div className="modal-backdrop" onClick={() => setShowReflection(false)}><motion.div className="settings-modal reflection-modal" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onClick={e => e.stopPropagation()}><div className="reflection-orbit">✦</div><span className="section-kicker">YILDIZIN YANDI</span><h2>Bu seans sana nasıl geldi?</h2><p>İstersen bir dokunuşla işaretle. Bu not yalnızca bu cihazda kalır.</p><div className="reflection-choices">{[['great','✨','İyi geldi'],['okay','🌙','Fena değildi'],['hard','🌱','Biraz zordu']].map(([value,emoji,label])=><button key={value} onClick={() => { if (lastSessionId) setSessions(items => items.map(item => item.id === lastSessionId ? { ...item, reflection: value as Session['reflection'] } : item)); setShowReflection(false) }}><span>{emoji}</span>{label}</button>)}</div><button className="reflection-skip" onClick={() => setShowReflection(false)}>Şimdilik geç</button></motion.div></div>}
     {showSettings && <div className="modal-backdrop" onClick={() => setShowSettings(false)}><motion.div className="settings-modal" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onClick={e => e.stopPropagation()}><div className="modal-head"><div><span className="section-kicker">KENDİ RİTMİNİ BUL</span><h2>Zamanlayıcı ayarları</h2></div><button className="icon-button" onClick={() => setShowSettings(false)} aria-label="Kapat"><X size={18}/></button></div><p>Odak ve mola sürelerini sana göre düzenle.</p><div className="duration-fields">{([['focus','Odaklanma'],['short','Kısa mola'],['long','Uzun mola']] as const).map(([id, name]) => <label key={id}>{name}<div><input type="number" min="1" max="180" value={durations[id]} onChange={e => setDurations(x => ({ ...x, [id]: Math.min(180, Math.max(1, Number(e.target.value) || 1)) }))}/><span>dakika</span></div></label>)}</div><label className="sound-setting"><input type="checkbox" checked={notificationsEnabled} onChange={e => { setNotificationsEnabled(e.target.checked); if (e.target.checked && 'Notification' in window && Notification.permission === 'default') void Notification.requestPermission() }}/> Seans ve mola bitince tarayıcı bildirimi göster</label><button className="primary-button full" onClick={() => { setShowSettings(false); setToast('Ayarların bu cihazda kaydedildi ✨') }}><Check size={16}/> Kaydet</button></motion.div></div>}
     <div className="mobile-nav">{menu.map(item => <button key={item.id} className={view === item.id ? 'active' : ''} aria-label={item.label} onClick={() => setView(item.id)}><item.icon size={19}/><span>{item.label}</span></button>)}</div>
-    <div className="local-badge"><span/> Yerel mod · Veriler bu cihazda</div>
+    <div className="local-badge"><span/> {account?'Hesap çevrimiçi · Seans geçmişi bu cihazda':'Kişisel mod · Ücretsiz hesapla arkadaşlarını bul'}</div>
   </div>
 }
 
@@ -261,51 +265,62 @@ function TimerPage({ active, secondsLeft, mode, setMode, timerMode, setTimerMode
   </section>
 }
 
-function Stations({ onToast }: { onToast:(s:string)=>void }) {
-  const [friends,setFriends]=useState<{id:string;name:string;handle:string;nudgedAt?:number}[]>(()=>getStored('yorunge-local-friends',[]))
-  const [messages,setMessages]=useState<Record<string,{id:string;text:string;time:number}[]>>(()=>getStored('yorunge-local-messages',{}))
+function Stations({ account, onToast }: { account:Account|null; onToast:(s:string)=>void }) {
+  const [friends,setFriends]=useState<Friend[]>([])
+  const [requests,setRequests]=useState<Account[]>([])
   const [selectedFriend,setSelectedFriend]=useState<string|null>(null)
-  const [name,setName]=useState('')
   const [handle,setHandle]=useState('')
   const [draft,setDraft]=useState('')
-  useEffect(()=>{localStorage.setItem('yorunge-local-friends',JSON.stringify(friends))},[friends])
-  useEffect(()=>{localStorage.setItem('yorunge-local-messages',JSON.stringify(messages))},[messages])
-  function addFriend(event:React.FormEvent) {
-    event.preventDefault()
-    const cleanHandle=handle.trim().replace(/^@/,'').toLowerCase()
-    if(!name.trim()||!cleanHandle){onToast('Bir ad ve kullanıcı adı yaz.');return}
-    if(friends.some(friend=>friend.handle===cleanHandle)){onToast('Bu kullanıcı adı yerel listende zaten var.');return}
-    const friend={id:crypto.randomUUID(),name:name.trim(),handle:cleanHandle}
-    setFriends(previous=>[...previous,friend]);setName('');setHandle('')
-    onToast('@'+cleanHandle+' bu cihazdaki arkadaş listene eklendi.')
+  const [messages,setMessages]=useState<ChatMessage[]>([])
+  const [loading,setLoading]=useState(false)
+  const [busy,setBusy]=useState(false)
+  async function refreshFriends() {
+    if (!account) return
+    try { const data=await api<{friends:Friend[];requests:Account[]}>('friends'); setFriends(data.friends); setRequests(data.requests); setSelectedFriend(current=>current && data.friends.some(friend=>friend.id===current)?current:data.friends[0]?.id??null) }
+    catch (error) { if (!(error instanceof ApiError && error.status===401)) onToast(error instanceof Error?error.message:'Arkadaşlar yüklenemedi.') }
   }
-  function nudge(friendId:string) {
-    setFriends(previous=>previous.map(friend=>friend.id===friendId?{...friend,nudgedAt:Date.now()}:friend))
-    onToast('Dürtme yerel olarak işaretlendi; karşı tarafa bildirim gönderilmedi.')
+  useEffect(()=>{void refreshFriends()},[account?.id])
+  useEffect(()=>{ if(!account)return; const id=window.setInterval(()=>void refreshFriends(),12000);return()=>clearInterval(id)},[account?.id])
+  useEffect(()=>{
+    if(!account||!selectedFriend){setMessages([]);return}
+    let active=true;setLoading(true)
+    const load=()=>api<{messages:ChatMessage[]}>(`messages?with=${encodeURIComponent(selectedFriend)}`).then(data=>{if(active)setMessages(data.messages)}).catch(error=>{if(active&&!(error instanceof ApiError&&error.status===401))onToast(error instanceof Error?error.message:'Sohbet yüklenemedi.')}).finally(()=>{if(active)setLoading(false)})
+    void load();const id=window.setInterval(()=>void load(),4000);return()=>{active=false;clearInterval(id)}
+  },[account?.id,selectedFriend])
+  async function addFriend(event:React.FormEvent) {
+    event.preventDefault();if(!handle.trim())return
+    setBusy(true)
+    try { const result=await api<{accepted?:boolean}>('friends/request',jsonPost({handle}));setHandle('');await refreshFriends();onToast(result.accepted?'Karşılıklı istek kabul edildi. Artık arkadaşsınız ✨':'Arkadaşlık isteği gönderildi ✨') }
+    catch(error){onToast(error instanceof Error?error.message:'İstek gönderilemedi.')}finally{setBusy(false)}
   }
-  function sendMessage(event:React.FormEvent) {
-    event.preventDefault()
-    if(!selectedFriend||!draft.trim())return
-    const friend= friends.find(item=>item.id===selectedFriend)
-    if(!friend)return
-    setMessages(previous=>({...previous,[selectedFriend]:[...(previous[selectedFriend]??[]),{id:crypto.randomUUID(),text:draft.trim(),time:Date.now()}]}))
-    setDraft('')
-    onToast('Mesaj bu cihazda kaydedildi; karşı tarafa gönderilmedi.')
+  async function decideRequest(userId:string, accept:boolean) {
+    try { await api(`friends/${accept?'accept':'decline'}`,jsonPost({userId}));await refreshFriends();onToast(accept?'Arkadaşlık isteği kabul edildi ✨':'İstek silindi.') }
+    catch(error){onToast(error instanceof Error?error.message:'İşlem tamamlanamadı.')}
+  }
+  async function nudge(friendId:string) {
+    try { await api('nudge',jsonPost({friendId}));await refreshFriends();onToast('Dürtmen arkadaşına ulaştı ✨') }
+    catch(error){onToast(error instanceof Error?error.message:'Dürtme gönderilemedi.')}
+  }
+  async function sendMessage(event:React.FormEvent) {
+    event.preventDefault();if(!selectedFriend||!draft.trim())return
+    try { const data=await api<{message:ChatMessage}>('messages',jsonPost({friendId:selectedFriend,text:draft}));setMessages(items=>[...items,data.message]);setDraft('') }
+    catch(error){onToast(error instanceof Error?error.message:'Mesaj gönderilemedi.')}
   }
   const selected=friends.find(friend=>friend.id===selectedFriend)
   return <section className="subpage">
-    <div className="subpage-title station-title"><div><span className="section-kicker">BİRLİKTE ODAKLAN · YEREL PROTOTİP</span><h1>İstasyonlar <span>🪐</span></h1><p>Arkadaş listesi ve mesaj taslakları yalnızca bu tarayıcıda tutulur.</p></div></div>
-    <div className="station-hero"><div className="station-universe"><div className="station-planet" aria-hidden="true"/><span className="station-orbit o1"/><span className="station-orbit o2"/></div><div className="station-summary"><span className="live-label">KENDİ YÖRÜNGENİN</span><h2>Birlikte<br/>güzel işler çıkar.</h2><p>Arkadaş ekle, dürtme bırak veya bu cihazda sohbet taslağı oluştur. Canlı gönderim için çevrimiçi sunucu bağlantısı gerekir.</p></div></div>
-    <div className="social-layout">
-      <div className="panel social-friends"><div className="panel-head"><div><span className="section-kicker">ARKADAŞLAR</span><h2>Yörüngedekiler</h2></div><span className="local-pill">YEREL</span></div>
-        <form className="add-friend-form" onSubmit={addFriend}><label>Görünen ad<input value={name} onChange={event=>setName(event.target.value)} placeholder="Arkadaşının adı" maxLength={40}/></label><label>Kullanıcı adı<input value={handle} onChange={event=>setHandle(event.target.value)} placeholder="@kullanici" maxLength={24}/></label><button className="primary-button" type="submit"><Plus size={15}/> Arkadaş ekle</button></form>
-        <div className="local-friend-list">{friends.length?friends.map(friend=><div className={'local-friend '+(selectedFriend===friend.id?'selected':'')} key={friend.id}><button className="local-friend-main" onClick={()=>setSelectedFriend(friend.id)}><span className="friend-orb">✦</span><span><b>{friend.name}</b><small>@{friend.handle}</small></span></button><button className="soft-button nudge-button" onClick={()=>nudge(friend.id)} title="Bu cihazda dürtme dene"><Bell size={14}/> Dürt{friend.nudgedAt?' ✓':''}</button><button className="soft-icon" aria-label={friend.name+' ile sohbeti aç'} onClick={()=>setSelectedFriend(friend.id)}><AudioLines size={15}/></button></div>):<div className="empty-sky"><Users size={22}/><b>Arkadaş listen boş</b><span>Bir ad ve kullanıcı adı ekleyerek bu cihazdaki sosyal akışı deneyebilirsin.</span></div>}</div>
-        <p className="local-disclaimer">Buraya eklenen kişiler gerçek hesaplarla eşleşmez; dürtme ve mesajlar gönderilmez.</p>
+    <div className="subpage-title station-title"><div><span className="section-kicker">BİRLİKTE ODAKLAN · CANLI İSTASYON</span><h1>İstasyonlar <span>🪐</span></h1><p>Arkadaşlarını bul, birbirinize destek olun ve aynı yörüngede sohbet edin.</p></div></div>
+    <div className="station-hero"><div className="station-universe"><div className="station-planet" aria-hidden="true"/><span className="station-orbit o1"/><span className="station-orbit o2"/></div><div className="station-summary"><span className="live-label">{account?'YÖRÜNGENİN AÇIK':'HESABIN GEREKİYOR'}</span><h2>Birlikte<br/>güzel işler çıkar.</h2><p>{account?'Arkadaşlık isteği gönder, dürtme bırak ve anlık sohbetle birbirine eşlik et.':'Arkadaşlarını bulup canlı sohbet edebilmek için önce profilinden ücretsiz hesap oluştur veya giriş yap.'}</p></div></div>
+    {!account?<div className="panel empty-sky"><Users size={22}/><b>İstasyonuna katıl</b><span>Profil sekmesinden ücretsiz hesap oluşturabilir veya hesabına giriş yapabilirsin.</span></div>:<div className="social-layout">
+      <div className="panel social-friends"><div className="panel-head"><div><span className="section-kicker">ARKADAŞLAR</span><h2>Yörüngedekiler</h2></div><span className="local-pill">{friends.length} KİŞİ</span></div>
+        <form className="add-friend-form" onSubmit={addFriend}><label>Kullanıcı adı<input value={handle} onChange={event=>setHandle(event.target.value)} placeholder="Arkadaşının @kullanıcı adı" maxLength={24}/></label><button className="primary-button" type="submit" disabled={busy}><Plus size={15}/> İstek gönder</button></form>
+        {requests.length>0&&<div className="incoming-requests"><span className="section-kicker">GELEN İSTEKLER · {requests.length}</span>{requests.map(request=><div className="local-friend" key={request.id}><span className="friend-orb">✦</span><span className="request-person"><b>{request.name}</b><small>@{request.handle}</small></span><button className="soft-button" onClick={()=>void decideRequest(request.id,false)}>Sil</button><button className="primary-button" onClick={()=>void decideRequest(request.id,true)}><Check size={14}/> Kabul et</button></div>)}</div>}
+        <div className="local-friend-list">{friends.length?friends.map(friend=><div className={'local-friend '+(selectedFriend===friend.id?'selected':'')} key={friend.id}><button className="local-friend-main" onClick={()=>setSelectedFriend(friend.id)}><span className="friend-orb">✦</span><span><b>{friend.name}</b><small>@{friend.handle}{friend.nudgedAt?` · dürttü ${new Date(friend.nudgedAt).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}`:''}</small></span></button><button className="soft-button nudge-button" onClick={()=>void nudge(friend.id)} title="Arkadaşını dürt"><Bell size={14}/> Dürt</button><button className="soft-icon" aria-label={friend.name+' ile sohbeti aç'} onClick={()=>setSelectedFriend(friend.id)}><AudioLines size={15}/></button></div>):<div className="empty-sky"><Users size={22}/><b>Yörüngen henüz boş</b><span>Arkadaşının hesap açmasını iste ve kullanıcı adıyla arkadaşlık isteği gönder.</span></div>}</div>
+        <p className="local-disclaimer">Mesajlar ve arkadaşlıklar hesabına bağlı olarak çevrimiçi saklanır.</p>
       </div>
-      <div className="panel local-chat"><div className="panel-head"><div><span className="section-kicker">SOHBET</span><h2>{selected?selected.name:'Bir sohbet seç'}</h2></div><span className="local-pill">BU CİHAZDA</span></div>
-        {selected?<><div className="chat-messages">{(messages[selected.id]??[]).length?(messages[selected.id]??[]).map(message=><div className="chat-message" key={message.id}><span>{message.text}</span><small>{new Date(message.time).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</small></div>):<div className="empty-sky"><AudioLines size={22}/><b>Sohbet burada başlar</b><span>Mesajlar sadece bu tarayıcıya kaydedilir.</span></div>}</div><form className="chat-compose" onSubmit={sendMessage}><input aria-label="Mesaj yaz" value={draft} onChange={event=>setDraft(event.target.value)} placeholder="Yerel sohbet taslağı yaz…" maxLength={500}/><button className="primary-button" type="submit" disabled={!draft.trim()}><ArrowUpRight size={16}/> Kaydet</button></form></>:<div className="empty-sky chat-prompt"><AudioLines size={24}/><b>Bir arkadaş seç</b><span>Sohbet alanı seçilen yerel kişi için açılır.</span></div>}
+      <div className="panel local-chat"><div className="panel-head"><div><span className="section-kicker">CANLI SOHBET · 4 SN’DE EŞİTLENİR</span><h2>{selected?selected.name:'Bir sohbet seç'}</h2></div><span className="local-pill">{account.name}</span></div>
+        {selected?<><div className="chat-messages">{loading&&!messages.length?<div className="empty-sky"><AudioLines size={22}/><b>Sohbet açılıyor…</b></div>:messages.length?messages.map(message=><div className={'chat-message '+(message.from===account.id?'mine':'')} key={message.id}><span>{message.text}</span><small>{new Date(message.time).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</small></div>):<div className="empty-sky"><AudioLines size={22}/><b>Sohbet burada başlar</b><span>Arkadaşına ilk mesajını gönder.</span></div>}</div><form className="chat-compose" onSubmit={sendMessage}><input aria-label="Mesaj yaz" value={draft} onChange={event=>setDraft(event.target.value)} placeholder="Mesajını yaz…" maxLength={500}/><button className="primary-button" type="submit" disabled={!draft.trim()}><ArrowUpRight size={16}/> Gönder</button></form></>:<div className="empty-sky chat-prompt"><AudioLines size={24}/><b>Bir arkadaş seç</b><span>Sohbet etmek için listenden bir arkadaş seç.</span></div>}
       </div>
-    </div>
+    </div>}
   </section>
 }function SkyPage({ sessions, totalMinutes, currentStreak }: { sessions:Session[]; totalMinutes:number; currentStreak:number }) {
   const days = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz']
@@ -318,16 +333,23 @@ function Stations({ onToast }: { onToast:(s:string)=>void }) {
   </section>
 }
 
-function Profile({ sessions, totalMinutes, todayMinutes, currentStreak, longestStreak, weekly, onToast, onSettings }: { sessions:Session[]; totalMinutes:number; todayMinutes:number; currentStreak:number; longestStreak:number; weekly:{day:string;value:number}[]; onToast:(message:string)=>void; onSettings:()=>void }) {  const [identity,setIdentity]=useState<{displayName:string;handle:string}|null>(()=>getStored('yorunge-local-identity',null))
-  const [identityName,setIdentityName]=useState('')
-  const [identityHandle,setIdentityHandle]=useState('')
-  function saveLocalIdentity(event:React.FormEvent) {
-    event.preventDefault()
-    const handle=identityHandle.trim().replace(/^@/,'').toLowerCase()
-    if(!identityName.trim()||!handle){onToast('Görünen ad ve kullanıcı adı gerekli.');return}
-    const next={displayName:identityName.trim(),handle}
-    localStorage.setItem('yorunge-local-identity',JSON.stringify(next));setIdentity(next);setIdentityName('');setIdentityHandle('')
-    onToast('Profil bu cihazda oluşturuldu.')
+function Profile({ account, setAccount, sessions, totalMinutes, todayMinutes, currentStreak, longestStreak, weekly, onToast, onSettings }: { account:Account|null; setAccount:(user:Account|null)=>void; sessions:Session[]; totalMinutes:number; todayMinutes:number; currentStreak:number; longestStreak:number; weekly:{day:string;value:number}[]; onToast:(message:string)=>void; onSettings:()=>void }) {
+  const [authMode,setAuthMode]=useState<'register'|'login'>('register')
+  const [displayName,setDisplayName]=useState('')
+  const [handle,setHandle]=useState('')
+  const [password,setPassword]=useState('')
+  const [authBusy,setAuthBusy]=useState(false)
+  async function submitAuth(event:React.FormEvent) {
+    event.preventDefault();setAuthBusy(true)
+    try {
+      const result=await api<{user:Account}>(`auth/${authMode}`,jsonPost({name:displayName,handle,password}))
+      setAccount(result.user);setPassword('');onToast(authMode==='register'?'Hesabın oluşturuldu. Hoş geldin! ✨':'Tekrar hoş geldin ✨')
+    } catch(error) { onToast(error instanceof Error?error.message:'Hesap isteği başarısız oldu.') }
+    finally { setAuthBusy(false) }
+  }
+  async function logout() {
+    try { await api('auth/logout',jsonPost({}));setAccount(null);onToast('Hesabından çıkış yaptın.') }
+    catch(error) { onToast(error instanceof Error?error.message:'Çıkış yapılamadı.') }
   }
   const badges:[string,string,boolean][]=[['🌟','İlk ateşleme',sessions.length>=1],['🌙','100 dk ışık',totalMinutes>=100],['🚀','3 seans',sessions.length>=3],['✨','3 günlük seri',currentStreak>=3],['🪐','10 saat ışık',totalMinutes>=600],['☄️','Geri dönüş',false]]
   const colors=['#80d7c8','#b6a8ff','#f2b58e','#89aef0','#ef9fab']
@@ -335,10 +357,9 @@ function Profile({ sessions, totalMinutes, todayMinutes, currentStreak, longestS
   const heat=Array.from({length:30},(_,i)=>{const date=new Date();date.setHours(0,0,0,0);date.setDate(date.getDate()-(29-i));const mins=sessions.filter(s=>new Date(s.startedAt).toDateString()===date.toDateString()).reduce((sum,s)=>sum+s.minutes,0);return mins===0?0:mins<25?1:mins<50?2:mins<90?3:4})
   const level=Math.floor(totalMinutes/120)+1
   return <section className="subpage">
-    <div className="profile-banner"><div className="profile-avatar">🧑🏻‍🚀<i/></div><div className="profile-info"><span className="section-kicker">BU CİHAZDAKİ ÇALIŞMA YOLCULUĞUN</span><h1>Odak yolculuğun</h1><p>Biraz çalış, çokça hayal et ✨</p><div className="profile-title">🪐 Uzay Tozu <span>LV. {level}</span></div></div><button className="soft-button profile-edit" onClick={()=>{setIdentityName(identity?.displayName ?? '');setIdentityHandle(identity?.handle ?? '');setIdentity(null);localStorage.removeItem('yorunge-local-identity')}}>Profil bilgileri</button></div>
-    <div className="panel local-identity-panel"><div><span className="section-kicker">YENİ ÜYELİK · YEREL</span><h2>'@
-$form+=@'
-{identity?'Profilin bu cihazda hazır':'Bu cihazda profil oluştur'}</h2><p>İsim ve kullanıcı adın yalnızca bu tarayıcıda saklanır. Parola, sunucu oturumu ve çevrimiçi üyelik bu sürümde yoktur.</p></div>{identity?<div className="identity-saved"><b>{identity.displayName}</b><span>@{identity.handle}</span><button type="button" className="soft-button" onClick={()=>{setIdentityName(identity.displayName);setIdentityHandle(identity.handle);setIdentity(null);localStorage.removeItem('yorunge-local-identity')}}>Profili değiştir</button></div>:<form className="identity-form" onSubmit={saveLocalIdentity}><label>Görünen ad<input required maxLength={40} value={identityName} onChange={event=>setIdentityName(event.target.value)} placeholder="Adın"/></label><label>Kullanıcı adı<input required maxLength={24} value={identityHandle} onChange={event=>setIdentityHandle(event.target.value)} placeholder="@kullanici"/></label><button className="primary-button" type="submit"><Plus size={15}/> Yerel profil oluştur</button></form>}</div><div className="profile-stats"><div><span>TOPLAM IŞIK</span><b>{Math.floor(totalMinutes/60)} sa {totalMinutes%60} dk</b><small><AudioLines size={13}/> her dakika · {sessions.length} seans</small></div><div><span>BUGÜN</span><b>{todayMinutes} dk</b><small><Goal size={13}/> hedef: 120 dk</small></div><div><span>MEVCUT SERİ</span><b>{currentStreak} gün</b><small><Flame size={13}/> en uzun: {longestStreak} gün</small></div><div><span>SEVİYE</span><b>{level}. Seviye</b><small><Sparkles size={13}/> {totalMinutes} ışık XP</small></div></div>
+    <div className="profile-banner"><div className="profile-avatar">🧑🏻‍🚀<i/></div><div className="profile-info"><span className="section-kicker">{account?'YÖRÜNGENE BAĞLI HESAP':'KİŞİSEL ÇALIŞMA YOLCULUĞUN'}</span><h1>{account?.name||'Odak yolculuğun'}</h1><p>{account?`@${account.handle} · Arkadaşlarınla aynı yörüngedesin`:'Biraz çalış, çokça hayal et ✨'}</p><div className="profile-title">🪐 Uzay Tozu <span>LV. {level}</span></div></div>{account&&<button className="soft-button profile-edit" onClick={()=>void logout()}>Çıkış yap</button>}</div>
+    <div className="panel local-identity-panel"><div><span className="section-kicker">{account?'HESABIN HAZIR':'ÜCRETSİZ ÜYELİK · CANLI'}</span><h2>{account?'Yörüngene hoş geldin':'Birlikte çalışmak için katıl'}</h2><p>{account?'Hesabın, arkadaşların ve sohbetlerin çevrimiçi kaydediliyor.':'Hesap oluşturduğunda kullanıcı adınla arkadaşlarını bulabilir, dürtme gönderebilir ve sohbet edebilirsin.'}</p></div>{account?<div className="identity-saved"><b>{account.name}</b><span>@{account.handle}</span><span>Hesap oluşturma: {new Date(account.createdAt).toLocaleDateString('tr-TR')}</span></div>:<div className="auth-panel"><div className="auth-tabs"><button type="button" className={authMode==='register'?'active':''} onClick={()=>setAuthMode('register')}>Yeni hesap</button><button type="button" className={authMode==='login'?'active':''} onClick={()=>setAuthMode('login')}>Giriş yap</button></div><form className="identity-form" onSubmit={submitAuth}>{authMode==='register'&&<label>Görünen ad<input required minLength={2} maxLength={40} autoComplete="name" value={displayName} onChange={event=>setDisplayName(event.target.value)} placeholder="Adın"/></label>}<label>Kullanıcı adı<input required minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" autoComplete="username" value={handle} onChange={event=>setHandle(event.target.value)} placeholder="3–24 karakter, ör. yildiz_7"/></label><label>Parola<input required minLength={10} maxLength={128} type="password" autoComplete={authMode==='register'?'new-password':'current-password'} value={password} onChange={event=>setPassword(event.target.value)} placeholder="En az 10 karakter"/></label><button className="primary-button" type="submit" disabled={authBusy}><Plus size={15}/>{authBusy?'İşleniyor…':authMode==='register'?'Ücretsiz hesap oluştur':'Giriş yap'}</button></form></div>}</div>
+    <div className="profile-stats"><div><span>TOPLAM IŞIK</span><b>{Math.floor(totalMinutes/60)} sa {totalMinutes%60} dk</b><small><AudioLines size={13}/> her dakika · {sessions.length} seans</small></div><div><span>BUGÜN</span><b>{todayMinutes} dk</b><small><Goal size={13}/> hedef: 120 dk</small></div><div><span>MEVCUT SERİ</span><b>{currentStreak} gün</b><small><Flame size={13}/> en uzun: {longestStreak} gün</small></div><div><span>SEVİYE</span><b>{level}. Seviye</b><small><Sparkles size={13}/> {totalMinutes} ışık XP</small></div></div>
     <div className="profile-grid"><div className="panel profile-chart"><div className="panel-head"><div><span className="section-kicker">RİTMİN</span><h2>Haftalık odaklanma</h2></div><span className="period-select">Bu hafta <ChevronDown size={14}/></span></div><div className="chart-wrap"><WeeklyChart data={weekly} color="#b6a8ff" chartId="profile"/></div></div>
     <div className="panel badge-panel"><div className="panel-head"><div><span className="section-kicker">KÜÇÜK BÜYÜK BAŞARILAR</span><h2>Rozetlerin</h2></div></div><div className="badge-grid">{badges.map(([emoji,title,earned])=><div className={earned?'':'locked'} key={title}><span>{emoji}</span><b>{title}</b></div>)}</div></div>
     <div className="panel heatmap-panel"><div className="panel-head"><div><span className="section-kicker">SON 30 GÜN</span><h2>Her gün yeni bir ışık</h2></div><span className="heat-legend">Daha az <i/> <i/> <i/> <i/> Daha çok</span></div><div className="heatmap">{heat.map((level,index)=><i key={index} className={`level-${level}`}/>)}</div></div>

@@ -28,7 +28,7 @@ Yörünge; kısa çalışma seanslarını daha düzenli ve keyifli hale getirmek
 | **Kişisel çalışma alanı** | Ders, konu ve çalışma hedefini serbestçe yazma |
 | **İlerleme** | Seans geçmişi, haftalık odak görünümü, seri, rozetler ve çalışma ısı haritası |
 | **Gökyüzüm** | WebGL ile çizilen, etkileşimli dönen gezegen ve kişisel yıldız haritası |
-| **İstasyonlar** | Arkadaşlarla odak deneyimi için sosyal arayüz prototipi |
+| **Üyelik ve istasyonlar** | Hesap oluşturma, giriş, arkadaşlık isteği, dürtme ve hesaplar arasında sohbet |
 | **Kişiselleştirme** | Beş tema, mobil uyumlu sayfalar ve isteğe bağlı ambiyans sesi |
 
 ## Ekranlar
@@ -72,11 +72,11 @@ npm run preview
 - **Framer Motion** — arayüz hareketleri
 - **Lucide** — arayüz simgeleri
 
-## Veri ve mevcut durum
+## Veri ve güvenlik
 
-Bu depodaki sürüm, tarayıcıda çalışan bir arayüz prototipidir. Zamanlayıcı tercihleri, çalışma geçmişi ve prototip profil/sosyal etkileşimleri cihazın yerel tarayıcı depolamasında saklanır. Şu an hesap oluşturma, parola ile oturum açma, arkadaşlık isteklerini başka kullanıcılara iletme veya cihazlar arasında canlı sohbet sağlayan bir API kodu bulunmuyor.
+Hesaplar, kullanıcı adı eşlemesi, oturumlar, arkadaşlık istekleri, dürtmeler ve sohbet mesajları Vercel sunucu işlevleri üzerinden Upstash Redis’te tutulur. Parolalar sunucu tarafında scrypt ile özetlenir; tarayıcıya yalnızca `HttpOnly`, `SameSite=Lax` oturum çerezi verilir. API oturum gerektirir, kullanıcı girdilerini sınırlar ve temel istek hız sınırlarını uygular. Upstash erişim bilgileri sadece Vercel ortam değişkenlerinde bulunur; kaynak koduna eklenmez.
 
-Vercel projesi için ücretsiz Upstash Redis kaynağı oluşturulup projeye bağlandı. Bu kaynak, uygulamadaki sosyal özelliklere henüz bağlanmış değildir; gerçek üyelik ve çok kullanıcılı sohbetin tamamlanması için sunucu API’si, güvenli kimlik doğrulama ve Redis veri modeli ayrıca uygulanmalıdır. Kaynakta Upstash anahtarı veya başka bir gizli anahtar tutulmaz.
+Pomodoro tercihleri ve bireysel çalışma geçmişi şu an tarayıcının yerel deposunda kalır; bu veriler farklı cihazlar arasında eşitlenmez. Çevrimiçi hesap ve sosyal özellikler için Vercel’de Upstash entegrasyonu kurulmuş olmalıdır. Uygulama `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` veya `KV_REST_API_URL` / `KV_REST_API_TOKEN` değişkenlerini kullanır. Ücretsiz Upstash planı aşılırsa sağlayıcı kota sınırları uygulanabilir; ücretli plana otomatik geçiş yapılandırılmamıştır.
 
 ## Görsel kaynakları
 
