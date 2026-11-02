@@ -64,6 +64,10 @@ npm run build
 npm run preview
 ```
 
+## Vercel’de yayınlama
+
+GitHub deposunu Vercel projesine bağla ve üretim dalını `main` olarak ayarla. Framework preset `Vite`, build komutu `npm run build`, çıktı klasörü `dist` olmalı. Sosyal API için projeye Vercel Marketplace üzerinden ücretsiz Upstash Redis bağlanır; Upstash REST değişkenleri Vercel’in Production ortamında bulunmalıdır. `main` dalına her gönderim yeni üretim dağıtımı başlatır.
+
 ## Teknoloji
 
 - **React 18** ve **TypeScript** — kullanıcı arayüzü
